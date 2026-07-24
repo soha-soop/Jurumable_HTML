@@ -270,7 +270,8 @@ body.obs .room-stage{background:transparent !important}
 html.obs,body.obs{height:auto}
 /* 관전(OBS 송출): 보드를 소스 전체에 꽉 채움 */
 body.spectator .room{height:100vh;width:100vw}
-body.spectator .room-stage{width:100vw;height:100vh}
+body.spectator .room-stage{position:fixed;inset:0;width:100vw;height:100vh}
+body.spectator #roomBoardScale{position:fixed;left:50%;top:50%;transform-origin:center center}
 /* 투명 모드일 때만 보이는 컨트롤 바 (OBS 송출 화면엔 안 잡히게 우상단 작게) */
 #obsBar{display:none;position:fixed;top:8px;right:8px;z-index:9999;gap:6px}
 body.obs #obsBar{display:flex}
@@ -809,11 +810,19 @@ function renderBoard(){
   updateTokenPreview();
 }
 function fitBoard(scaleEl, stageEl, W, H, allowUpscale){
-  const pad = allowUpscale ? 0 : 40;
-  const availW=stageEl.clientWidth-pad, availH=stageEl.clientHeight-pad;
+  let availW, availH;
+  if(allowUpscale){
+    // OBS 관전: 소스(창) 전체 크기 기준으로 꽉 채움
+    availW = window.innerWidth;
+    availH = window.innerHeight;
+  } else {
+    const pad=40;
+    availW = stageEl.clientWidth-pad;
+    availH = stageEl.clientHeight-pad;
+  }
   const raw=Math.min(availW/W, availH/H);
   const s = allowUpscale ? raw : Math.min(1, raw);
-  scaleEl.style.transform=`scale(${s})`;
+  scaleEl.style.transform = allowUpscale ? `translate(-50%,-50%) scale(${s})` : `scale(${s})`;
 }
 window.addEventListener("resize",()=>{ if($("#view-editor").offsetParent) renderBoard(); if($("#view-room").offsetParent) renderRoomBoard(); });
 
