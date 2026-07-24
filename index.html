@@ -268,11 +268,12 @@ body.obs{background:transparent !important}
 body.obs .room{grid-template-columns:1fr;background:transparent}
 body.obs .room-stage{background:transparent !important}
 html.obs,body.obs{height:auto}
-/* 투명 모드일 때만 보이는 종료 버튼 (OBS 소스에는 잘 안 잡히도록 아주 작게) */
-#obsExit{display:none;position:fixed;top:8px;right:8px;z-index:9999;
-  background:rgba(20,20,35,.85);color:#fff;border:1px solid var(--accent);
-  padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:700}
-body.obs #obsExit{display:block}
+/* 투명 모드일 때만 보이는 컨트롤 바 (OBS 송출 화면엔 안 잡히게 우상단 작게) */
+#obsBar{display:none;position:fixed;top:8px;right:8px;z-index:9999;gap:6px}
+body.obs #obsBar{display:flex}
+#obsBar button{background:rgba(20,20,35,.85);color:#fff;border:1px solid var(--accent);
+  padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:700;white-space:nowrap}
+#obsBar button:hover{background:rgba(40,40,60,.95)}
 
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#000;color:#fff;
   padding:12px 20px;border-radius:10px;border:1px solid var(--accent);z-index:999;font-size:14px;opacity:0;transition:.3s;pointer-events:none}
@@ -494,9 +495,12 @@ body.obs #obsExit{display:block}
     <div class="room-side" id="roomSide">
       <div>
         <h4 style="margin:0 0 8px;color:var(--sub)">방 코드</h4>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div id="roomCodeBig" style="font-family:'Do Hyeon';font-size:30px;letter-spacing:4px"></div>
-          <button class="btn sm" onclick="copyInvite()">링크 복사</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn sm" style="flex:1" onclick="copyInvite()">🔗 참가 링크</button>
+          <button class="btn sm" style="flex:1" onclick="copyObsInvite()">📺 OBS 링크</button>
         </div>
       </div>
       <div>
@@ -517,7 +521,11 @@ body.obs #obsExit{display:block}
 </div>
 
 <div class="toast" id="toast"></div>
-<button id="obsExit" onclick="exitObs()">✕ 투명 모드 종료</button>
+<div id="obsBar">
+  <button onclick="copyInvite()" title="일반 참가 링크 복사">🔗 참가 링크</button>
+  <button onclick="copyObsInvite()" title="OBS용 투명 링크 복사">📺 OBS 링크</button>
+  <button onclick="exitObs()">✕ 종료</button>
+</div>
 <div id="modalHost"></div>
 
 <script>
@@ -1172,9 +1180,28 @@ function leaveRoomCleanup(){
   roomData=null; ROOM=null;
 }
 
+function copyUrl(url, label){
+  const done=()=>toast((label||"링크")+" 복사됨");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done).catch(()=>fallbackCopy(url,done));
+  } else { fallbackCopy(url, done); }
+}
+function fallbackCopy(url, done){
+  try{
+    const ta=document.createElement("textarea");
+    ta.value=url; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok=document.execCommand("copy"); document.body.removeChild(ta);
+    if(ok) done(); else prompt("아래 링크를 복사하세요:", url);
+  }catch(e){ prompt("아래 링크를 복사하세요:", url); }
+}
 function copyInvite(){
   const url=`${location.origin}${location.pathname}?room=${ROOM}`;
-  navigator.clipboard.writeText(url).then(()=>toast("초대 링크 복사됨: "+url)).catch(()=>toast(url));
+  copyUrl(url, "참가 링크");
+}
+function copyObsInvite(){
+  const url=`${location.origin}${location.pathname}?room=${ROOM}&obs=1`;
+  copyUrl(url, "OBS 투명 링크");
 }
 
 /* ---------- 방 렌더 ---------- */
@@ -1475,6 +1502,7 @@ window.jm = {
   advance:()=>advanceTurn(),
   reset:()=>resetGame(),
   copy:()=>copyInvite(),
+  copyObs:()=>copyObsInvite(),
   exit:()=>exitObs(),
   setToken:(dataUrl)=>{ if(roomRef) roomRef.child("players/"+ME+"/token").set(dataUrl); },
   setTokenFromFile:(file)=>{ fileToDataURL(file,300,d=>{ if(roomRef) roomRef.child("players/"+ME+"/token").set(d); toast("내 말 이미지 변경됨"); }); },
@@ -1508,7 +1536,8 @@ function controlHtml(){
   </style></head><body>
     <h2>🎲 주루마블 컨트롤</h2>
     <div class="code" id="code">-----</div>
-    <button onclick="op().jm.copy()">초대 링크 복사</button>
+    <button onclick="op().jm.copy()">🔗 참가 링크 복사</button>
+    <button onclick="op().jm.copyObs()">📺 OBS 투명 링크 복사</button>
     <hr>
     <div class="plist" id="plist"></div>
     <div class="row" id="status"></div>
