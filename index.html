@@ -271,6 +271,7 @@ html.obs,body.obs{height:auto}
 /* 투명 모드일 때만 보이는 컨트롤 바 (OBS 송출 화면엔 안 잡히게 우상단 작게) */
 #obsBar{display:none;position:fixed;top:8px;right:8px;z-index:9999;gap:6px}
 body.obs #obsBar{display:flex}
+body.spectator #obsBar{display:none !important}
 #obsBar button{background:rgba(20,20,35,.85);color:#fff;border:1px solid var(--accent);
   padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:700;white-space:nowrap}
 #obsBar button:hover{background:rgba(40,40,60,.95)}
@@ -1042,7 +1043,7 @@ function clearSlot(e,i){ e.stopPropagation(); SLOTS[i]=null; renderSlots(); }
      players:{ pid:{name,ready,token,pos} }
    }
 ================================================================== */
-let ME=null, ROOM=null, roomRef=null, roomData=null, IS_HOST=false, PENDING_ROOM=null;
+let ME=null, ROOM=null, roomRef=null, roomData=null, IS_HOST=false, PENDING_ROOM=null, IS_SPECTATOR=false;
 
 function randCode(){const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let s="";for(let i=0;i<5;i++)s+=c[Math.floor(Math.random()*c.length)];return s;}
 function pid(){return "p"+Math.random().toString(36).slice(2,9);}
@@ -1074,6 +1075,33 @@ async function createRoom(){
   await firebase.database().ref("roomIndex/"+code).set(now); // 가벼운 색인
   enterRoom(code);
 }
+// OBS 관전 모드: 닉네임/참가 없이 방을 읽기 전용으로 보기만 함
+async function spectateRoom(code){
+  if(!FB_OK) return;
+  code=(code||"").toUpperCase().trim();
+  if(!code) return;
+  try{ ME = await AUTH_READY; }catch(e){}
+  // 관전자는 players에 안 들어감. ME는 렌더 판단용으로만 사용(없어도 무방).
+  IS_SPECTATOR=true; IS_HOST=false;
+  const snap=await firebase.database().ref("rooms/"+code).get();
+  if(!snap.exists()){ toast("존재하지 않는 방입니다"); return; }
+  ROOM=code;
+  roomRef=firebase.database().ref("rooms/"+code);
+  roomRef.on("value",snap=>{
+    if(!snap.exists()){ leaveRoomCleanup(); go("lobby"); return; }
+    roomData=snap.val();
+    renderRoom();
+  });
+  go("room");
+  $("#roomCodeBig").textContent=code;
+  // 투명 모드 자동 on (팝업 컨트롤은 관전 모드에선 띄우지 않음)
+  $("#obsToggle").checked=true;
+  document.documentElement.classList.add("obs");
+  document.body.classList.add("obs");
+  document.body.classList.add("spectator");
+  setTimeout(renderRoomBoard,50);
+}
+
 async function joinRoom(){
   if(!FB_OK){toast("Firebase 미설정");return;}
   const code=(PENDING_ROOM||"").toUpperCase().trim();
@@ -1178,6 +1206,11 @@ function leaveRoomCleanup(){
   stopHeartbeat();
   if(roomRef){ roomRef.off(); roomRef=null; }
   roomData=null; ROOM=null;
+  if(IS_SPECTATOR){
+    IS_SPECTATOR=false;
+    document.body.classList.remove("spectator","obs");
+    document.documentElement.classList.remove("obs");
+  }
 }
 
 function copyUrl(url, label){
@@ -1208,6 +1241,14 @@ function copyObsInvite(){
 let lastDiceSeq=-1, lastMarqueeTs=0;
 function renderRoom(){
   const rd=roomData; if(!rd)return;
+  if(IS_SPECTATOR){
+    // 관전(OBS): 보드·말·주사위·전광판만 렌더, 조작 UI 없음
+    renderRoomBoard();
+    if(rd.dice && rd.dice.seq && rd.dice.seq!==lastDiceSeq){ lastDiceSeq=rd.dice.seq; playDiceAnim(rd.dice.value); }
+    if(rd.marquee && rd.marquee.ts!==lastMarqueeTs){ lastMarqueeTs=rd.marquee.ts; showMarquee(rd.marquee); }
+    if(!rd.marquee){ removeMarquee(); }
+    return;
+  }
   IS_HOST = rd.host===ME;
   renderRoomBoard();
   renderPlayerList();
@@ -1611,6 +1652,13 @@ window.addEventListener("DOMContentLoaded",()=>{
   initEditor();
   const p=new URLSearchParams(location.search);
   const rc=p.get("room");
+  const isObs=p.get("obs")==="1";
+  if(rc && isObs){
+    // OBS 투명 송출: 닉네임/참가 없이 관전자로 자동 입장
+    PENDING_ROOM=rc.toUpperCase();
+    spectateRoom(PENDING_ROOM);
+    return;
+  }
   if(rc){
     PENDING_ROOM=rc.toUpperCase();
     go("lobby");
