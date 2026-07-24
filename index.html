@@ -268,6 +268,9 @@ body.obs{background:transparent !important}
 body.obs .room{grid-template-columns:1fr;background:transparent}
 body.obs .room-stage{background:transparent !important}
 html.obs,body.obs{height:auto}
+/* 관전(OBS 송출): 보드를 소스 전체에 꽉 채움 */
+body.spectator .room{height:100vh;width:100vw}
+body.spectator .room-stage{width:100vw;height:100vh}
 /* 투명 모드일 때만 보이는 컨트롤 바 (OBS 송출 화면엔 안 잡히게 우상단 작게) */
 #obsBar{display:none;position:fixed;top:8px;right:8px;z-index:9999;gap:6px}
 body.obs #obsBar{display:flex}
@@ -805,10 +808,11 @@ function renderBoard(){
   TPL._coords=coords;
   updateTokenPreview();
 }
-function fitBoard(scaleEl, stageEl, W, H){
-  const pad=40;
+function fitBoard(scaleEl, stageEl, W, H, allowUpscale){
+  const pad = allowUpscale ? 0 : 40;
   const availW=stageEl.clientWidth-pad, availH=stageEl.clientHeight-pad;
-  const s=Math.min(1, availW/W, availH/H);
+  const raw=Math.min(availW/W, availH/H);
+  const s = allowUpscale ? raw : Math.min(1, raw);
   scaleEl.style.transform=`scale(${s})`;
 }
 window.addEventListener("resize",()=>{ if($("#view-editor").offsetParent) renderBoard(); if($("#view-room").offsetParent) renderRoomBoard(); });
@@ -1099,7 +1103,8 @@ async function spectateRoom(code){
   document.documentElement.classList.add("obs");
   document.body.classList.add("obs");
   document.body.classList.add("spectator");
-  setTimeout(renderRoomBoard,50);
+  // OBS 소스 크기가 늦게 확정될 수 있으니 여러 번 다시 맞춤
+  [50,300,800,1500].forEach(t=>setTimeout(()=>{ if(IS_SPECTATOR) renderRoomBoard(); }, t));
 }
 
 async function joinRoom(){
@@ -1296,7 +1301,7 @@ function renderRoomBoard(){
       board.appendChild(el);
     });
   });
-  fitBoard($("#roomBoardScale"),$("#roomStage"),tpl.boardW||tpl.boardSize||720, tpl.boardH||tpl.boardSize||720);
+  fitBoard($("#roomBoardScale"),$("#roomStage"),tpl.boardW||tpl.boardSize||720, tpl.boardH||tpl.boardSize||720, IS_SPECTATOR);
 }
 function colorFor(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))%360;return `hsl(${h},70%,55%)`;}
 
